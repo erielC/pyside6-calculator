@@ -1,8 +1,8 @@
 import sys
 from PySide6.QtWidgets import QApplication, QWidget
 from PySide6.QtCore import Qt
-from .ui.ui_home_page import Ui_Calculator
-from .backend import CalculatorEngine
+from ui.ui_home_page import Ui_Calculator
+from backend import CalculatorEngine
 
 class CalculatorApp(QWidget):
     def __init__(self):
