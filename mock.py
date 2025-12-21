@@ -1,4 +1,141 @@
-# =====================================================================
+"""
+=============================================================================
+CHART CALLBACKS - Time-Series Charts
+=============================================================================
+
+CALLBACKS:
+1. Show/hide charts section based on site selection
+2. Update all 6 charts when site selected or time range changes
+
+BEGINNER NOTES:
+- Charts only appear when user selects a site from table
+- All 6 charts update together in one callback (efficient!)
+- Uses Plotly for interactive charts (zoom, pan, hover)
+=============================================================================
+"""
+
+from dash import Input, Output, State, html
+import plotly.graph_objects as go
+import pandas as pd
+from config import config
+from src.data import data_service
+from src.components.charts import create_empty_charts_section, create_charts_section
+
+
+def register_chart_callbacks(app):
+    """
+    Register chart-related callbacks
+    
+    Args:
+        app: Dash app instance
+    """
+    
+    # =========================================================================
+    # CALLBACK 1: Show/Hide Charts Section
+    # =========================================================================
+    @app.callback(
+        Output('charts-section', 'children'),
+        Input('selected-site-store', 'data')
+    )
+    def toggle_charts_section(selected_site):
+        """
+        Show charts when site selected, hide when not
+        
+        Triggers:
+        - When user selects/deselects a site
+        
+        Returns:
+        - Empty placeholder OR charts structure
+        """
+        
+        if not selected_site:
+            # No site selected - show placeholder
+            return create_empty_charts_section()
+        
+        # Site selected - show charts structure
+        return create_charts_section()
+    
+    
+    # =========================================================================
+    # CALLBACK 2: Update All Charts
+    # =========================================================================
+    @app.callback(
+        [
+            Output('selected-site-name', 'children'),
+            Output('chart-soc', 'figure'),
+            Output('chart-power', 'figure'),
+            Output('chart-ac-voltage', 'figure'),
+            Output('chart-dc-voltage', 'figure'),
+            Output('chart-temperature', 'figure'),
+            Output('chart-revenue', 'figure'),
+            Output('chart-data-quality', 'children'),
+        ],
+        [
+            Input('selected-site-store', 'data'),
+            Input('chart-time-range', 'value'),
+        ]
+    )
+    def update_all_charts(selected_site, time_range):
+        """
+        Update all 6 charts for the selected site
+        
+        Triggers:
+        - Site selection changes
+        - Time range dropdown changes
+        
+        Returns:
+        - Site name
+        - 6 Plotly figures (one for each chart)
+        - Data quality message
+        """
+        
+        # Create empty figure for error cases
+        empty_fig = go.Figure()
+        empty_fig.update_layout(
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            annotations=[dict(
+                text="No data",
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.5,
+                showarrow=False,
+                font=dict(size=16, color='gray')
+            )]
+        )
+        
+        # No site selected
+        if not selected_site:
+            return (
+                "",
+                empty_fig, empty_fig, empty_fig,
+                empty_fig, empty_fig, empty_fig,
+                ""
+            )
+        
+        # Get site info
+        site_id = selected_site['site_id']
+        site_name = selected_site['name']
+        
+        # Fetch time-series data
+        data = data_service.get_site_data(site_id, hours=time_range or 24)
+        
+        # No data available
+        if not data or len(data) == 0:
+            return (
+                site_name,
+                empty_fig, empty_fig, empty_fig,
+                empty_fig, empty_fig, empty_fig,
+                "No time-series data available for this site"
+            )
+        
+        # Convert to pandas DataFrame for easier manipulation
+        df = pd.DataFrame(data)
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        df = df.sort_values('timestamp')  # Chronological order
+        
+        # =====================================================================
         # CHART 1: State of Charge (%)
         # =====================================================================
         fig_soc = go.Figure()
