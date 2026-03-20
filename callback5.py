@@ -1,13 +1,16 @@
-# === Callback 5: Update Map (FIX LONGITUDE SIGNS) ===
+# === Callback 5: Update Map ===
 @callback(Output("us-bess-map", "figure"), Input("filtered-sites-store", "data"))
 def update_map(filtered_sites):
-    """Create map with CORRECTED longitude signs"""
+    """Create map with BESS markers"""
 
-    if not filtered_sites or len(filtered_sites) == 0:
+    print(f"\n🗺️  Updating map...")
+
+    if not filtered_sites:
+        print("   No sites to display")
         fig = go.Figure(go.Scattermapbox())
         fig.update_layout(
             mapbox=dict(
-                style=config.MAP_STYLE, center=dict(lat=39.5, lon=-98.35), zoom=3
+                style="carto-positron", center=dict(lat=39.5, lon=-98.35), zoom=3
             ),
             margin=dict(l=0, r=0, t=0, b=0),
             height=config.MAP_HEIGHT,
@@ -17,93 +20,60 @@ def update_map(filtered_sites):
     # Convert to DataFrame
     df = pd.DataFrame(filtered_sites)
 
-    # Extract coordinates
-    df["lat"] = pd.to_numeric(df.get("Lattitude", df.get("Latitude")), errors="coerce")
-    df["lon"] = pd.to_numeric(df.get("Longitude"), errors="coerce")
+    print(f"   Total sites: {len(df)}")
 
-    # Remove NaN
+    # Extract coordinates - note "Lattitude" spelling
+    df["lat"] = pd.to_numeric(df["Lattitude"], errors="coerce")
+    df["lon"] = pd.to_numeric(df["Longitude"], errors="coerce")
+
+    # Remove invalid
     df = df.dropna(subset=["lat", "lon"])
 
-    # CRITICAL FIX: Force longitude to be negative for US sites
-    # US is in Western Hemisphere (negative longitude)
-    df["lon"] = df["lon"].abs() * -1  # Make all longitudes negative
-
-    print(f"\n🗺️  After longitude fix:")
-    print(f"   Sites: {len(df)}")
-    print(f"   Lat range: {df['lat'].min():.2f} to {df['lat'].max():.2f}")
-    print(f"   Lon range: {df['lon'].min():.2f} to {df['lon'].max():.2f}")
-    print(f"   Sample site: {df.iloc[0]['Project/Plant Name']}")
-    print(f"     → ({df.iloc[0]['lat']:.2f}, {df.iloc[0]['lon']:.2f})\n")
-
-    # Validate US bounds
-    df = df[
-        (df["lat"] >= 24) & (df["lat"] <= 50) & (df["lon"] >= -125) & (df["lon"] <= -66)
-    ]
+    print(f"   Valid coordinates: {len(df)}")
+    print(f"   Sample: {df.iloc[0]['Project/Plant Name']}")
+    print(f"     → lat={df.iloc[0]['lat']}, lon={df.iloc[0]['lon']}")
 
     if df.empty:
-        print("❌ No valid coordinates!")
+        print("   ❌ No valid coordinates!")
         fig = go.Figure(go.Scattermapbox())
         fig.update_layout(
             mapbox=dict(
-                style=config.MAP_STYLE, center=dict(lat=39.5, lon=-98.35), zoom=3
+                style="carto-positron", center=dict(lat=39.5, lon=-98.35), zoom=3
             ),
             margin=dict(l=0, r=0, t=0, b=0),
             height=config.MAP_HEIGHT,
         )
         return fig
 
-    # Colors
+    # Colors by status
     status_colors = {
-        "Operational": config.COLOR_OPERATIONAL,
-        "Under Construction": config.COLOR_CONSTRUCTION,
-        "Planned": config.COLOR_PLANNED,
+        "Operational": "#28a745",
+        "Under Construction": "#ffc107",
+        "Planned": "#17a2b8",
     }
-    df["color"] = df["Status"].map(status_colors).fillna(config.COLOR_NEUTRAL)
+    df["color"] = df["Status"].map(status_colors).fillna("#6c757d")
 
-    # Sizes
-    df["size"] = (
-        df["Rated Power (kW)"]
-        .fillna(0)
-        .apply(
-            lambda x: 15 if config.MAP_SIZE_STANDARD else min(30, max(10, 10 + x / 100))
-        )
-    )
+    # Marker sizes
+    df["size"] = 12
 
     # Hover text
-    df["hover_text"] = (
-        "<b>"
-        + df["Project/Plant Name"].fillna("Unknown")
-        + "</b><br>"
-        + "<i>Click for details</i>"
-    )
+    df["hover_text"] = "<b>" + df["Project/Plant Name"] + "</b><br>Click for details"
 
     # Store full site data
-    customdata_list = []
-    for idx, row in df.iterrows():
-        site_name = row["Project/Plant Name"]
-        original_site = next(
-            (s for s in filtered_sites if s.get("Project/Plant Name") == site_name),
-            row.to_dict(),
-        )
-        customdata_list.append(original_site)
+    customdata = df.to_dict("records")
 
     # Create figure
     fig = go.Figure()
 
     fig.add_trace(
         go.Scattermapbox(
-            lat=df["lat"],
-            lon=df["lon"],  # ← Now negative
+            lat=df["lat"],  # ← Latitude (36)
+            lon=df["lon"],  # ← Longitude (-105)
             mode="markers",
-            marker=dict(
-                size=df["size"],
-                color=df["color"],
-                opacity=0.8,
-            ),
+            marker=dict(size=df["size"], color=df["color"], opacity=0.8),
             text=df["hover_text"],
             hoverinfo="text",
-            customdata=customdata_list,
-            name="",
+            customdata=customdata,
         )
     )
 
@@ -111,9 +81,11 @@ def update_map(filtered_sites):
     center_lat = df["lat"].mean()
     center_lon = df["lon"].mean()
 
+    print(f"   Map center: ({center_lat:.2f}, {center_lon:.2f})\n")
+
     fig.update_layout(
         mapbox=dict(
-            style=config.MAP_STYLE,
+            style="carto-positron",
             center=dict(lat=center_lat, lon=center_lon),
             zoom=3.5,
         ),
