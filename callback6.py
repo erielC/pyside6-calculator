@@ -1,41 +1,127 @@
-# === Callback 6: Update Table ===
+# === Map Click Callback ===
 @callback(
-    [
-        Output("bess-sites-table", "data"),
-        Output("table-site-count", "children"),
-    ],
-    Input("filtered-sites-store", "data"),
+    Output("map-selected-site-panel", "children"),
+    Input("us-bess-map", "clickData"),
 )
-def update_table(filtered_sites):
-    """
-    Fill table with filtered BESS sites
+def display_selected_site_from_map(click_data):
+    """Display site details when marker clicked"""
 
-    Triggers: When filtered sites change
-    Returns: Table data (list of dicts) + site count
-    """
+    # Debug print
+    print(f"\n🔔 Map click: {click_data}\n")
 
-    if not filtered_sites or len(filtered_sites) == 0:
-        return [], "0 sites"
-
-    # Prepare table data - select only columns needed for table
-    table_data = []
-    for site in filtered_sites:
-        table_data.append(
-            {
-                "Project/Plant Name": site.get("Project/Plant Name", "Unknown"),
-                "State/Province": site.get("State/Province", ""),
-                "Status": site.get("Status", "Unknown"),
-                "Rated Power (kW)": site.get("Rated Power (kW)", 0),
-                "Energy Capacity (kWh)": site.get("Energy Capacity (kWh)", 0),
-                "Duration (hours)": site.get("Duration (hours)", ""),
-                "Storage Device Technology Mid-Type": site.get(
-                    "Storage Device Technology Mid-Type", ""
-                ),
-                "Utility": site.get("Utility", ""),
-                "Commissioned Date": site.get("Commissioned Date", ""),
-            }
+    # No click yet
+    if not click_data:
+        return html.P(
+            "Click a marker to see details", className="text-muted text-center py-3"
         )
 
-    count_text = f"{len(filtered_sites):,} sites"
+    # Extract site from customdata
+    try:
+        site = click_data["points"][0]["customdata"]
+    except (KeyError, IndexError, TypeError) as e:
+        print(f"❌ Error extracting site: {e}")
+        return html.P("Error loading site data", className="text-danger text-center")
 
-    return table_data, count_text
+    # Build info panel
+    return dbc.Card(
+        [
+            dbc.CardHeader(
+                [
+                    html.H4(
+                        [
+                            html.I(className="fas fa-map-marker-alt me-2 text-primary"),
+                            "Selected Site",
+                        ],
+                        className="mb-0",
+                    )
+                ]
+            ),
+            dbc.CardBody(
+                [
+                    dbc.Row(
+                        [
+                            # Column 1: Basic Info
+                            dbc.Col(
+                                [
+                                    html.H5(
+                                        site.get("Project/Plant Name", "Unknown"),
+                                        className="text-primary mb-3",
+                                    ),
+                                    html.P(
+                                        [
+                                            html.Strong("State: "),
+                                            site.get("State/Province", "N/A"),
+                                        ]
+                                    ),
+                                    html.P(
+                                        [
+                                            html.Strong("Status: "),
+                                            html.Span(
+                                                site.get("Status", "Unknown"),
+                                                className=f"badge bg-{'success' if site.get('Status') == 'Operational' else 'warning'}",
+                                            ),
+                                        ]
+                                    ),
+                                ],
+                                width=12,
+                                md=4,
+                            ),
+                            # Column 2: Technical
+                            dbc.Col(
+                                [
+                                    html.H6(
+                                        "Technical Specs", className="text-muted mb-3"
+                                    ),
+                                    html.P(
+                                        [
+                                            html.Strong("Power: "),
+                                            f"{site.get('Rated Power (kW)', 0):,.0f} kW",
+                                        ]
+                                    ),
+                                    html.P(
+                                        [
+                                            html.Strong("Energy: "),
+                                            f"{site.get('Energy Capacity (kWh)', 0):,.0f} kWh",
+                                        ]
+                                    ),
+                                    html.P(
+                                        [
+                                            html.Strong("Duration: "),
+                                            f"{site.get('Duration (hours)', 'N/A')} hours",
+                                        ]
+                                    ),
+                                ],
+                                width=12,
+                                md=4,
+                            ),
+                            # Column 3: Other
+                            dbc.Col(
+                                [
+                                    html.H6("Details", className="text-muted mb-3"),
+                                    html.P(
+                                        [
+                                            html.Strong("Technology: "),
+                                            site.get(
+                                                "Storage Device Technology Mid-Type",
+                                                "N/A",
+                                            ),
+                                        ]
+                                    ),
+                                    html.P(
+                                        [
+                                            html.Strong("Utility: "),
+                                            site.get("Utility", "N/A"),
+                                        ]
+                                    ),
+                                ],
+                                width=12,
+                                md=4,
+                            ),
+                        ]
+                    )
+                ]
+            ),
+        ],
+        className="mt-3 shadow-sm border-primary",
+        style={"borderLeft": "4px solid"},
+    )
