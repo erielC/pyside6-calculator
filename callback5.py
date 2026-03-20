@@ -1,16 +1,47 @@
 # === Callback 5: Update Map ===
 @callback(Output("us-bess-map", "figure"), Input("filtered-sites-store", "data"))
 def update_map(filtered_sites):
-    """Create map with BESS markers"""
+    """Create map - restricted to United States only"""
 
     print(f"\n🗺️  Updating map...")
 
     if not filtered_sites:
-        print("   No sites to display")
         fig = go.Figure(go.Scattermapbox())
         fig.update_layout(
             mapbox=dict(
-                style="carto-positron", center=dict(lat=39.5, lon=-98.35), zoom=3
+                style="carto-positron",
+                center=dict(lat=39.5, lon=-98.35),
+                zoom=3,
+                # Restrict map to US bounds
+                bounds=dict(
+                    west=-125,  # West Coast
+                    east=-66,  # East Coast
+                    south=24,  # Southern tip (Florida Keys)
+                    north=50,  # Northern border (Canada)
+                ),
+            ),
+            margin=dict(l=0, r=0, t=0, b=0),
+            height=config.MAP_HEIGHT,
+        )
+        return fig
+
+    # Filter to ONLY sites with valid coordinates
+    mappable_sites = [
+        site for site in filtered_sites if site.get("has_coordinates", False)
+    ]
+
+    print(f"   Total sites: {len(filtered_sites)}")
+    print(f"   Mappable sites (with coords): {len(mappable_sites)}")
+
+    if not mappable_sites:
+        print("   ❌ No sites have valid coordinates to map")
+        fig = go.Figure(go.Scattermapbox())
+        fig.update_layout(
+            mapbox=dict(
+                style="carto-positron",
+                center=dict(lat=39.5, lon=-98.35),
+                zoom=3,
+                bounds=dict(west=-125, east=-66, south=24, north=50),
             ),
             margin=dict(l=0, r=0, t=0, b=0),
             height=config.MAP_HEIGHT,
@@ -18,32 +49,14 @@ def update_map(filtered_sites):
         return fig
 
     # Convert to DataFrame
-    df = pd.DataFrame(filtered_sites)
+    df = pd.DataFrame(mappable_sites)
 
-    print(f"   Total sites: {len(df)}")
+    # Extract coordinates
+    df["lat"] = df["Lattitude"]
+    df["lon"] = df["Longitude"]
 
-    # Extract coordinates - note "Lattitude" spelling
-    df["lat"] = pd.to_numeric(df["Lattitude"], errors="coerce")
-    df["lon"] = pd.to_numeric(df["Longitude"], errors="coerce")
-
-    # Remove invalid
-    df = df.dropna(subset=["lat", "lon"])
-
-    print(f"   Valid coordinates: {len(df)}")
     print(f"   Sample: {df.iloc[0]['Project/Plant Name']}")
     print(f"     → lat={df.iloc[0]['lat']}, lon={df.iloc[0]['lon']}")
-
-    if df.empty:
-        print("   ❌ No valid coordinates!")
-        fig = go.Figure(go.Scattermapbox())
-        fig.update_layout(
-            mapbox=dict(
-                style="carto-positron", center=dict(lat=39.5, lon=-98.35), zoom=3
-            ),
-            margin=dict(l=0, r=0, t=0, b=0),
-            height=config.MAP_HEIGHT,
-        )
-        return fig
 
     # Colors by status
     status_colors = {
@@ -67,8 +80,8 @@ def update_map(filtered_sites):
 
     fig.add_trace(
         go.Scattermapbox(
-            lat=df["lat"],  # ← Latitude (36)
-            lon=df["lon"],  # ← Longitude (-105)
+            lat=df["lat"],
+            lon=df["lon"],
             mode="markers",
             marker=dict(size=df["size"], color=df["color"], opacity=0.8),
             text=df["hover_text"],
@@ -88,6 +101,13 @@ def update_map(filtered_sites):
             style="carto-positron",
             center=dict(lat=center_lat, lon=center_lon),
             zoom=3.5,
+            # RESTRICT TO US BOUNDS - Can't pan outside these coordinates
+            bounds=dict(
+                west=-125,  # West Coast (includes Alaska)
+                east=-66,  # East Coast
+                south=24,  # Southern tip (includes Puerto Rico)
+                north=50,  # Northern border
+            ),
         ),
         margin=dict(l=0, r=0, t=0, b=0),
         showlegend=False,
